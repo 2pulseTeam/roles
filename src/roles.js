@@ -50,7 +50,7 @@ const objectHasKey = function(object, key) {
     });
   });
 
-  return _.contains(newKeys, key);
+  return _.includes(newKeys, key);
 };
 
 /**
@@ -103,7 +103,7 @@ Roles.registerAction = function (name, adminAllow, adminDeny) {
   check(adminAllow, Match.Optional(Match.Any))
   check(adminDeny, Match.Optional(Match.Any))
 
-  if (!_.contains(this._actions, name)) {
+  if (!_.includes(this._actions, name)) {
     this._actions.push(name)
   }
 
@@ -123,7 +123,7 @@ Roles.registerHelper = function (name, adminHelper) {
   check(name, String)
   check(adminHelper, Match.Any)
 
-  if (!_.contains(this._helpers, name)) {
+  if (!_.includes(this._helpers, name)) {
     this._helpers.push(name)
   }
 
@@ -159,7 +159,7 @@ Roles.Role.prototype.allow = function (action, allow) {
   check(action, String)
   check(allow, Match.Any)
 
-  if (!_.contains(Roles._actions, action)) {
+  if (!_.includes(Roles._actions, action)) {
     Roles.registerAction(action)
   }
 
@@ -181,7 +181,7 @@ Roles.Role.prototype.deny = function (action, deny) {
   check(action, String)
   check(deny, Match.Any)
 
-  if (!_.contains(Roles._actions, action)) {
+  if (!_.includes(Roles._actions, action)) {
     Roles.registerAction(action)
   }
 
@@ -203,7 +203,7 @@ Roles.Role.prototype.helper = function (helper, func) {
   check(helper, String)
   check(func, Match.Any)
 
-  if (!_.contains(Roles._helpers, helper)) {
+  if (!_.includes(Roles._helpers, helper)) {
     Roles.registerHelper(helper)
   }
 
@@ -235,7 +235,7 @@ Roles.getUserRoles = function (userId, includeSpecial) {
       roles.push('__notLoggedIn__')
     } else {
       roles.push('__loggedIn__')
-      if (!_.contains(roles, 'admin')) {
+      if (!_.includes(roles, 'admin')) {
         roles.push('__notAdmin__')
       }
     }
@@ -250,7 +250,7 @@ Roles.getUserRoles = function (userId, includeSpecial) {
 Roles.helper = function (userId, helper) {
   check(userId, Match.OneOf(String, null, undefined))
   check(helper, String)
-  if (!_.contains(this._helpers, helper)) throw 'Helper "' + helper + '" is not defined'
+  if (!_.includes(this._helpers, helper)) throw 'Helper "' + helper + '" is not defined'
 
   var args = _.toArray(arguments).slice(2)
   var context = { userId: userId }
