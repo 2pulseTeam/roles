@@ -1,7 +1,62 @@
+const {Meteor} = Package.meteor;
+const {Mongo} = Package.mongo;
+const {check, Match} = Package.check;
+
+/*
+ * Helpers
+ */
+const willChangeWithParent = function(object, key) {
+  if (!_.isObject(object)) {
+    return;
+  }
+  var willChange = false;
+  _.each(_.keys(object), function(modifyingKey) {
+    if (key && key.indexOf(modifyingKey) === 0) {
+      willChange = true;
+    }
+  });
+  return willChange;
+};
+
+const objectHasKey = function(object, key) {
+  var dotNotation = {};
+
+  (function recurse(obj, current) {
+    for(var key in obj) {
+      var value = obj[key];
+      var newKey = (current ? current + "." + key : key);  // joined key with dot
+      if(value && typeof value === "object") {
+        recurse(value, newKey);  // it's a nested object, so do it again
+      } else {
+        dotNotation[newKey] = value;  // it's not an object, so set the property
+      }
+    }
+  })(object);
+
+  var keys = _.keys(dotNotation);
+  var newKeys = [];
+
+  _.each(keys, function(_key) {
+    var parts = _key.split('.');
+    var added = [];
+    _.each(parts, function(part) {
+      if (!isNaN(part)) {
+        part = '$';
+        added.push(part);
+      } else {
+        added.push(part);
+        newKeys.push(added.join('.'));
+      }
+    });
+  });
+
+  return _.contains(newKeys, key);
+};
+
 /**
  * Init the variable
  */
-Roles = {}
+const Roles = {}
 
 Roles.debug = false
 
@@ -437,3 +492,157 @@ Mongo.Collection.prototype.attachRoles = function (name, dontAllow) {
     },
   })
 }
+
+Roles.keys = {};
+
+/**
+ * Initialize the collection
+ */
+Roles.keys.collection = new Meteor.Collection('nicolaslopezj_roles_keys');
+
+/**
+ * Set the permissions
+ * Users can request keys just for them
+ */
+Roles.keys.collection.allow({
+  insert: function(userId, doc) {
+    return userId === doc.userId;
+  },
+  remove: function(userId, doc) {
+    return userId === doc.userId;
+  }
+});
+
+/**
+ * Requests a new key
+ * @param  {String} userId    Id of the userId
+ * @param  {Date}   expiresAt Date of expiration
+ * @return {String}           Id of the key
+ */
+Roles.keys.request = function(userId, expiresAt) {
+  check(userId, String);
+  var doc = {
+    userId: userId,
+    createdAt: new Date()
+  };
+  if (expiresAt) {
+    check(expiresAt, Date);
+    doc.expiresAt = expiresAt;
+  }
+  return this.collection.insert(doc);
+};
+
+/**
+ * Returns the userId of the specified key and deletes the key from the database
+ * @param  {String}  key
+ * @param  {Boolean} dontDelete True to leave the key in the database
+ * @return {String}             Id of the user
+ */
+Roles.keys.getUserId = function(key, dontDelete) {
+  check(key, String);
+  check(dontDelete, Match.Optional(Boolean));
+
+  var doc = this.collection.findOne({ _id: key, $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gte: new Date() } }] });
+  if (!doc) return;
+
+  if (!dontDelete) {
+    if (!doc.expiresAt) {
+      console.log('borrando por no tener expire at');
+      this.collection.remove({ _id: key });
+    } else {
+      if (moment(doc.expiresAt).isBefore(moment())) {
+        console.log('borrando por expire at ya pasó');
+        this.collection.remove({ _id: key });
+      }
+    }
+  }
+
+  return doc.userId;
+}
+
+if (Meteor.isServer) {
+	/**
+	 * Adds roles to a user
+	 */
+	Roles.addUserToRoles = function (userId, roles) {
+	  check(userId, String)
+	  check(roles, Match.OneOf(String, Array))
+	  if (!_.isArray(roles)) {
+		roles = [roles]
+	  }
+
+	  return Meteor.users.update({ _id: userId }, { $addToSet: { roles: { $each: roles } } })
+	}
+
+	/**
+	 * Set user roles
+	 */
+	Roles.setUserRoles = function (userId, roles) {
+	  check(userId, String)
+	  check(roles, Match.OneOf(String, Array))
+	  if (!_.isArray(roles)) {
+		roles = [roles]
+	  }
+
+	  return Meteor.users.update({ _id: userId }, { $set: { roles: roles } })
+	}
+
+	/**
+	 * Removes roles from a user
+	 */
+	Roles.removeUserFromRoles = function (userId, roles) {
+	  check(userId, String)
+	  check(roles, Match.OneOf(String, Array))
+	  if (!_.isArray(roles)) {
+		roles = [roles]
+	  }
+
+	  return Meteor.users.update({ _id: userId }, { $pullAll: { roles: roles } })
+	}
+
+	/**
+	 * Requires a permission to run a resolver
+	 */
+	const defaultOptions = {
+	  returnNull: false,
+	  showKey: true,
+	  mapArgs: (...args) => args
+	}
+	Roles.action = function (action, userOptions) {
+	  const options = {...defaultOptions, ...userOptions}
+	  return function (target, key, descriptor) {
+		let fn = descriptor.value || target[key]
+		if (typeof fn !== 'function') {
+		  throw new Error(`@Roles.action decorator can only be applied to methods not: ${typeof fn}`)
+		}
+
+		return {
+		  configurable: true,
+		  get () {
+			const newFn = (root, params, context, ...other) => {
+			  const args = options.mapArgs(root, params, context, ...other)
+			  const hasPermission = Roles.userHasPermission(context.userId, action, ...args)
+			  if (hasPermission) {
+				return fn(root, params, context, ...other)
+			  } else {
+				if (options.returnNull) {
+				  return null
+				} else {
+				  const keyText = options.showKey ? ` "${action}" in "${key}"` : ''
+				  throw new Error(`The user has no permission to perform the action${keyText}`)
+				}
+			  }
+			}
+			Object.defineProperty(this, key, {
+			  value: newFn,
+			  configurable: true,
+			  writable: true
+			})
+			return newFn
+		  }
+		}
+	  }
+	}
+}
+
+export default Roles;
