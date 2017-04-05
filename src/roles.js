@@ -564,6 +564,13 @@ Roles.keys.getUserId = function(key, dontDelete) {
 
 if (Meteor.isServer) {
 	/**
+	 * Publish user roles
+	 */
+	Meteor.publish('nicolaslopezj_roles', function () {
+		return Meteor.users.find({ _id: this.userId }, { fields: { roles: 1 } })
+	})
+
+	/**
 	 * Adds roles to a user
 	 */
 	Roles.addUserToRoles = function (userId, roles) {
