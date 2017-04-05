@@ -2,6 +2,8 @@ const {Meteor} = Package.meteor;
 const {Mongo} = Package.mongo;
 const {check, Match} = Package.check;
 
+const _ = require('lodash');
+
 /*
  * Helpers
  */
@@ -643,6 +645,10 @@ if (Meteor.isServer) {
 		}
 	  }
 	}
+}
+
+if (Meteor.isClient) {
+	var subscription = Meteor.subscribe('nicolaslopezj_roles')
 }
 
 export default Roles;
