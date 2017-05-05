@@ -656,6 +656,13 @@ if (Meteor.isServer) {
 
 if (Meteor.isClient) {
 	var subscription = Meteor.subscribe('nicolaslopezj_roles')
+
+	/**
+	 * Helper to check if roles are ready
+	 */
+	Roles.isReady = function () {
+	  return subscription.ready()
+	}
 }
 
 export default Roles;
